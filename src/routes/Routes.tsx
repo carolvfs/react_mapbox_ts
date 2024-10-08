@@ -1,16 +1,16 @@
 import React from 'react'
 import { Routes, Route, useMatch } from 'react-router-dom'
 
-import paths from '../../consts/route-paths'
-import Home from '../home/Home'
+import paths from '../consts/route-paths'
+import WorldMap from '../views/world-map/WorldMap'
 
-const homePath    = `${paths.home}`
+// const homePath    = `${paths.home}`
 
 const MyRoutes = () => {
 
     return (
         <Routes>
-            <Route path='/' element={<Home/>} />
+            <Route path='/' element={<WorldMap/>} />
         </Routes>
     )
 }
