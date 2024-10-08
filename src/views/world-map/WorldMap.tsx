@@ -52,7 +52,7 @@ const Home: React.FC = () => {
 
     return markers.map((marker:any, index: any) => {
       return (
-        <Marker position={marker.position} icon={customMarker}>
+        <Marker key={`world-map-key-${index}`} position={marker.position} icon={customMarker}>
           <Popup>
           {marker.label}
           </Popup>

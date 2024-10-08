@@ -28,5 +28,10 @@ module.exports = {
       template: './src/index.html'
     })
   ],
-  mode: 'development'
+  mode: 'development',
+
+  devServer: {
+    historyApiFallback: true, // It makes the routes work properly
+  }
+  
 };
