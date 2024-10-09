@@ -1,12 +1,13 @@
-import React, { useState, useCallback, useMemo } from 'react'
-import Map, { Marker, Source, Layer } from 'react-map-gl'
-import type { CircleLayer } from 'react-map-gl'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
+import Map, { Marker } from 'react-map-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import ControlPanel, { Mode } from './control-panel'
-import { Expression, StyleFunction } from 'mapbox-gl'
+import { ExpressionSpecification, DataDrivenPropertyValueSpecification } from 'mapbox-gl'
 
 // https://github.com/visgl/react-map-gl/blob/7.1-release/examples/side-by-side/src/app.tsx
 // https://visgl.github.io/react-map-gl/examples/side-by-side
+
+type CircleColorSpecification = string | ExpressionSpecification | DataDrivenPropertyValueSpecification<string> | undefined;
 
 const LeftMapStyle: React.CSSProperties = {
   position: 'absolute',
@@ -30,6 +31,7 @@ function Home() {
 
   const [mode, setMode] = useState<Mode>('side-by-side')
   const [activeMap, setActiveMap] = useState<'left' | 'right'>('left')
+  const [isWebGLSupported, setIsWebGLSupported] = useState(true)
   
   const onLeftMoveStart = useCallback(() => setActiveMap('left'), [])
   const onRightMoveStart = useCallback(() => setActiveMap('right'), [])
@@ -46,6 +48,19 @@ function Home() {
   }, [width, mode])
 
   const [selectedPoint, setSelectedPoint] = useState(null)
+
+  useEffect(() => {
+    // Check for WebGL support
+    const isSupported = (() => {
+      try {
+        const canvas = document.createElement('canvas');
+        return !!(window.WebGLRenderingContext && (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+      } catch (e) {
+        return false;
+      }
+    })();
+    setIsWebGLSupported(isSupported);
+  }, [])
 
   const handleMarkerClick = (point:any) => {
     setSelectedPoint(point)
@@ -84,25 +99,27 @@ const geojson4 = {
 const geojsonArr = [geojson2, geojson]
 const geojsonArr2 = [geojson3, geojson4]
 
-const layerStyle: CircleLayer = {
+const layerStyle = {
   id: 'point',
   type: 'circle',
+  source: "",
   paint: {
     'circle-radius': 10,
     'circle-color': 'red'
   }
 }
 
-const layerStyle2: CircleLayer = {
+const layerStyle2 = {
   id: 'point',
   type: 'circle',
+  source: "",
   paint: {
     'circle-radius': 10,
     'circle-color': 'blue'
   }
 }
 
-const getCircleColor = (color: string | StyleFunction | Expression | undefined): string => {
+const getCircleColor = (color: CircleColorSpecification): string => {
   if (typeof color === 'string') {
     return color;
   }
@@ -110,6 +127,9 @@ const getCircleColor = (color: string | StyleFunction | Expression | undefined):
   return 'purple'; 
 }
 
+if (!isWebGLSupported) {
+  return <div style={{ padding: '20px' }}>WebGL is not supported in your browser. Please try a different browser or enable WebGL.</div>;
+}
   
   return (
     <>
