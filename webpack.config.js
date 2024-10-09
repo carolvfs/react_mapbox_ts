@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const Dotenv = require('dotenv-webpack');
 
 module.exports = {
   entry: './src/index.tsx',
@@ -26,12 +27,16 @@ module.exports = {
   plugins: [
     new HtmlWebpackPlugin({
       template: './src/index.html'
-    })
+    }),
+    new Dotenv()
   ],
   mode: 'development',
 
   devServer: {
     historyApiFallback: true, // It makes the routes work properly
+  },
+  externals: {
+    'dotenv': 'commonjs dotenv' // Exclude dotenv from the bundle
   }
   
 };
