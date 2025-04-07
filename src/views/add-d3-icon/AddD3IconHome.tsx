@@ -59,7 +59,7 @@ const AddD3IconHome = () => {
       const myMarker = document.createElement('div')
       myMarker.style.width = '30px'
       myMarker.style.height = '30px'
-      // myMarker.style.backgroundImage = 'url(charging-station.png)'
+      myMarker.style.backgroundImage = 'url(charging-station.png)'
       // myMarker.style.backgroundSize = 'cover'
       // myMarker.style.borderRadius = '50%'
       myMarker.style.background = 'transparent'

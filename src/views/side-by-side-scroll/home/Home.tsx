@@ -42,11 +42,11 @@ const Home: React.FC = () => {
     setMapInfo(_mapInfo)
   },[])
 
-  useEffect(() => {
-    updateLayers()
-  },[updateLayers])
+  // useEffect(() => {
+  //   updateLayers()
+  // },[updateLayers])
 
-  useEffect(() => {  updateMapInfo() },[updateMapInfo])
+  // useEffect(() => {  updateMapInfo() },[updateMapInfo])
 
 
 

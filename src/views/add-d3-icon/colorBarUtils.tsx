@@ -71,14 +71,14 @@ export const createColorBar = (
     .call(xAxis)
 
   // Add the icon under the bar
-  const iconWidth = 30 // Adjust the icon width as needed
-  const iconHeight = 30 // Adjust the icon height as needed
+  const iconWidth = 30 
+  const iconHeight = 30 
 
   svg
     .append('image')
-    .attr('xlink:href', '/charging-station.png') // Updated path
-    .attr('x', (width + 20) / 2 - iconWidth / 2) // Center the icon horizontally
-    .attr('y', height + 50) // Position the icon under the x-axis
+    .attr('xlink:href', '/charging-station.png')
+    .attr('x', (width + 20) / 2 - iconWidth / 2)
+    .attr('y', height + 50)
     .attr('width', iconWidth)
     .attr('height', iconHeight)
 }

@@ -11,6 +11,8 @@ import HmapHome from '../views/hmap/HmapHome'
 import AddPointsHome from '../views/add-points.tsx/AddPointsHome'
 import AddCustomIconsHome from '../views/add-custom-icon/AddCustomIconsHome'
 import AddD3IconHome from '../views/add-d3-icon/AddD3IconHome'
+import PointsHome from '../views/layer-points/Points'
+import AddImageHome from '../views/add-image/AddImageHome'
 
 // const homePath    = `${paths.home}`
 
@@ -18,7 +20,7 @@ const MyRoutes = () => {
 
     return (
         <Routes>
-            <Route path='/' element={<AddD3IconHome/>} />
+            <Route path='/' element={<AddImageHome/>} />
             <Route path='/addpoints' element={<AddPointsHome/>} />
             <Route path='/worldmap' element={<WorldMap/>} />
             <Route path='/sidebyside' element={<SideBySide/>} />
@@ -28,6 +30,8 @@ const MyRoutes = () => {
             <Route path='/hmap' element={<HmapHome/>} />
             <Route path='/customicons' element={<AddCustomIconsHome/>} />
             <Route path='/d3icon' element={<AddD3IconHome/>} />
+            <Route path='/points' element={<PointsHome/>} />
+            <Route path='/addimage' element={<AddImageHome/>} />
         </Routes>
     )
 }

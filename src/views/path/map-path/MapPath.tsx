@@ -1,117 +1,176 @@
-import React, { useState, useEffect } from 'react';
-import ReactMapGL, { Marker, Source, Layer, ViewStateChangeEvent } from 'react-map-gl';
+import React, { useEffect, useRef, useState } from 'react';
+import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
+// import InclinationChart from './InclinationChart'
+import InclinationChart from './InclinationChartD3'
 
-const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN as string
+mapboxgl.accessToken = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN;
 
-const MapComponent: React.FC = () => {
-  const [viewport, setViewport] = useState({
-    latitude: 40.7128,
-    longitude: -74.0060,
-    zoom: 10,
-  });
-  const [locations, setLocations] = useState<{ A: [number, number] | null; B: [number, number] | null }>({ A: null, B: null });
-  const [route, setRoute] = useState<any>(null);
-  const [moving, setMoving] = useState(false);
-  const [markerPosition, setMarkerPosition] = useState<[number, number] | null>(null);
-
-  const carSpeed = 20; // Speed in km/h
-  const speedInMetersPerSec = carSpeed * 1000 / 3600;
+const MapComponent = () => {
+  const mapContainerRef = useRef(null);
+  const mapRef = useRef(null);
+  const [locations, setLocations] = useState({ A: null, B: null });
+  const [route, setRoute] = useState(null);
+  const [inclinations, setInclinations] = useState([]);
 
   useEffect(() => {
-    if (moving && route) {
-      animateMarker();
-    }
-  }, [moving, route]);
+    const map = new mapboxgl.Map({
+      container: mapContainerRef.current,
+      style: 'mapbox://styles/mapbox/streets-v11',
+      center:[-103.58413792780232, 39.599367221926585],
+      zoom: 5,
+    });
+    mapRef.current = map
 
-  const handleMapClick = (event: any) => {
-    const lngLatArray = event.lngLat.toArray() as [number, number];
-    if (!locations.A) {
-      setLocations({ ...locations, A: lngLatArray });
-    } else if (!locations.B) {
-      setLocations({ ...locations, B: lngLatArray });
-      fetchRoute(locations.A, lngLatArray);
+    map.on('load', () => {
+      // Add DEM source if not already present.
+      if (!map.getSource('mapbox-dem')) {
+        map.addSource('mapbox-dem', {
+          type: 'raster-dem',
+          url: 'mapbox://mapbox.terrain-rgb',
+          tileSize: 512,
+          maxzoom: 14,
+        });
+
+        map.setTerrain({ source: 'mapbox-dem', exaggeration: 1 });
+      }
+
+      map.on('click', (e) => {
+        const lngLat = [e.lngLat.lng, e.lngLat.lat];
+        if (!locations.A) {
+          setLocations((prev) => ({ ...prev, A: lngLat }));
+          new mapboxgl.Marker({ color: 'blue' })
+            .setLngLat(lngLat)
+            .addTo(map);
+        } else if (!locations.B) {
+          setLocations((prev) => ({ ...prev, B: lngLat }));
+          new mapboxgl.Marker({ color: 'blue' })
+            .setLngLat(lngLat)
+            .addTo(map);
+
+          fetchRoute(locations.A, lngLat, map);
+        }
+      });
+    });
+
+
+    return () => map.remove();
+  }, [locations.A]);
+
+  const fetchRoute = async (locationA, locationB, map) => {
+    try {
+      const query = `https://api.mapbox.com/directions/v5/mapbox/driving/${locationA[0]},${locationA[1]};${locationB[0]},${locationB[1]}?geometries=geojson&overview=full&access_token=${mapboxgl.accessToken}`;
+      const response = await fetch(query);
+      const data = await response.json();
+      if (data.routes && data.routes.length > 0) {
+        console.log(data.routes)
+        const routeGeoJson = data.routes[0].geometry;
+        setRoute(routeGeoJson);
+        addRouteLayer(routeGeoJson, map);
+
+        computeInclination(routeGeoJson, map);
+      }
+    } catch (error) {
+      console.error('Error fetching route:', error);
     }
   };
 
-  const fetchRoute = async (locationA: [number, number], locationB: [number, number]) => {
-    const response = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${locationA[0]},${locationA[1]};${locationB[0]},${locationB[1]}?geometries=geojson&access_token=${MAPBOX_TOKEN}`);
-    const data = await response.json();
-    setRoute(data.routes[0].geometry);
+
+  const addRouteLayer = (routeGeoJson, map) => {
+    if (map.getSource('route')) {
+      map.getSource('route').setData(routeGeoJson);
+    } else {
+      map.addSource('route', {
+        type: 'geojson',
+        data: routeGeoJson,
+      });
+      map.addLayer({
+        id: 'routeLayer',
+        type: 'line',
+        source: 'route',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round',
+        },
+        paint: {
+          'line-color': '#888',
+          'line-width': 8,
+        },
+      });
+    }
+  };
+
+
+  const computeInclination = (routeGeoJson, map) => {
+    const coordinates = routeGeoJson.coordinates;
+    const inclinationsArray = [];
+    for (let i = 1; i < coordinates.length; i++) {
+      const prevCoord = coordinates[i - 1];
+      const currCoord = coordinates[i];
+
+      const elevationPrev = map.queryTerrainElevation(prevCoord, { exaggeration: 1 });
+      const elevationCurr = map.queryTerrainElevation(currCoord, { exaggeration: 1 });
+
+      const distance = haversineDistance(prevCoord, currCoord);
+
+      const slope = distance !== 0 ? ((elevationCurr - elevationPrev) / distance) * 100 : 0;
+      inclinationsArray.push(slope);
+    }
+    setInclinations(inclinationsArray);
+    console.log('Inclinations along route (%):', inclinationsArray);
+  };
+
+
+  const haversineDistance = (coord1, coord2) => {
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const [lon1, lat1] = coord1;
+    const [lon2, lat2] = coord2;
+    const R = 6371000;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
   };
 
   const animateMarker = () => {
     if (!route) return;
-
+    const map = mapRef.current;
     const coordinates = route.coordinates;
-    const length = coordinates.length;
-    if (length < 2) return;
+    let counter = 0;
+    const markerEl = document.createElement('div');
+    markerEl.style.backgroundColor = 'red';
+    markerEl.style.width = '10px';
+    markerEl.style.height = '10px';
+    markerEl.style.borderRadius = '50%';
 
-    const totalDistance = coordinates.reduce((acc: number, coord: number[], i: number) => {
-      if (i === 0) return acc;
-      const prevCoord = coordinates[i - 1];
-      const distance = Math.sqrt(Math.pow(coord[0] - prevCoord[0], 2) + Math.pow(coord[1] - prevCoord[1], 2));
-      return acc + distance;
-    }, 0);
 
-    const stepInterval = 20; // 100 milliseconds per step
-    let elapsedTime = 0;
+    const marker = new mapboxgl.Marker(markerEl).setLngLat(coordinates[0]).addTo(map);
 
-    const interval = setInterval(() => {
-      if (elapsedTime >= totalDistance / speedInMetersPerSec) {
-        clearInterval(interval);
-        setMoving(false);
-        return;
-      }
 
-      const progress = (elapsedTime * speedInMetersPerSec) / totalDistance;
-      const segmentIndex = Math.floor(progress * (length - 1));
-      const segmentProgress = progress * (length - 1) - segmentIndex;
-      const startCoord = coordinates[segmentIndex];
-      const endCoord = coordinates[segmentIndex + 1];
-
-      const lng = startCoord[0] + segmentProgress * (endCoord[0] - startCoord[0]);
-      const lat = startCoord[1] + segmentProgress * (endCoord[1] - startCoord[1]);
-
-      setMarkerPosition([lng, lat]);
-      elapsedTime += stepInterval / 1000; // Convert milliseconds to seconds
-    }, stepInterval);
+    function animate() {
+      counter++;
+      if (counter >= coordinates.length) return;
+      marker.setLngLat(coordinates[counter]);
+      requestAnimationFrame(animate);
+    }
+    animate();
   };
 
   return (
-    <ReactMapGL
-      {...viewport}
-      style={{ width: '100%', height: '100vh' }}
-      mapStyle="mapbox://styles/mapbox/streets-v11"
-      onMove={(evt: ViewStateChangeEvent) => setViewport(evt.viewState)}
-      onClick={handleMapClick}
-      mapboxAccessToken={MAPBOX_TOKEN}
-    >
-      {locations.A && <Marker longitude={locations.A[0]} latitude={locations.A[1]} />}
-      {locations.B && <Marker longitude={locations.B[0]} latitude={locations.B[1]} />}
-
-      {route && (
-        <Source id="route" type="geojson" data={route}>
-          <Layer
-            id="routeLayer"
-            type="line"
-            paint={{
-              'line-color': '#888',
-              'line-width': 8,
-            }}
-          />
-        </Source>
-      )}
-
-      {markerPosition && (
-        <Marker longitude={markerPosition[0]} latitude={markerPosition[1]}>
-          <div style={{ backgroundColor: 'red', width: '10px', height: '10px', borderRadius: '50%' }} />
-        </Marker>
-      )}
-
-      <button style={{ position: "relative", zIndex: 2000}} onClick={() => setMoving(true)}>Start Movement</button>
-      <button style={{ position: "relative", zIndex: 2000}} onClick={() => setMoving(false)}>Stop Movement</button>
-    </ReactMapGL>
+    <div>
+      <div ref={mapContainerRef} style={{ width: '100%', height: '100vh' }} />
+      <button
+        onClick={animateMarker}
+        style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 1 }}
+      >
+        Start Movement
+      </button>
+      {inclinations.length > 0 && <InclinationChart inclinations={inclinations} />}
+    </div>
   );
 };
 
