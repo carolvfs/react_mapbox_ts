@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import * as turf from '@turf/turf';
-import InclinationChart from './InclinationChartD3';
-import { downloadInclinationCsv } from '../../../utils/exportCsv'
+// import InclinationChart from './InclinationChart'
+import InclinationChart from './InclinationChartD3'
 
 mapboxgl.accessToken = process.env.REACT_APP_MAPBOX_ACCESS_TOKEN;
 
@@ -18,10 +17,10 @@ const MapComponent = () => {
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: 'mapbox://styles/mapbox/streets-v11',
-      center: [-103.58413792780232, 39.599367221926585],
+      center:[-103.58413792780232, 39.599367221926585],
       zoom: 5,
     });
-    mapRef.current = map;
+    mapRef.current = map
 
     map.on('load', () => {
       // Add DEM source if not already present.
@@ -32,6 +31,7 @@ const MapComponent = () => {
           tileSize: 512,
           maxzoom: 14,
         });
+
         map.setTerrain({ source: 'mapbox-dem', exaggeration: 1 });
       }
 
@@ -47,10 +47,12 @@ const MapComponent = () => {
           new mapboxgl.Marker({ color: 'blue' })
             .setLngLat(lngLat)
             .addTo(map);
+
           fetchRoute(locations.A, lngLat, map);
         }
       });
     });
+
 
     return () => map.remove();
   }, [locations.A]);
@@ -61,15 +63,18 @@ const MapComponent = () => {
       const response = await fetch(query);
       const data = await response.json();
       if (data.routes && data.routes.length > 0) {
+        console.log(data.routes)
         const routeGeoJson = data.routes[0].geometry;
         setRoute(routeGeoJson);
         addRouteLayer(routeGeoJson, map);
+
         computeInclination(routeGeoJson, map);
       }
     } catch (error) {
       console.error('Error fetching route:', error);
     }
   };
+
 
   const addRouteLayer = (routeGeoJson, map) => {
     if (map.getSource('route')) {
@@ -95,45 +100,40 @@ const MapComponent = () => {
     }
   };
 
+
   const computeInclination = (routeGeoJson, map) => {
-    // 1. wrap coordinates in a turf LineString
-    const line = turf.lineString(routeGeoJson.coordinates);
-
-    // 2. total length in meters
-    const totalLength = turf.length(line, { units: 'meters' });
-
-    // 3. sampling interval: 2 miles ≈ 3 218 m
-    const interval = 3218;
-
+    const coordinates = routeGeoJson.coordinates;
     const inclinationsArray = [];
+    for (let i = 1; i < coordinates.length; i++) {
+      const prevCoord = coordinates[i - 1];
+      const currCoord = coordinates[i];
 
-    // 4. sample every 'interval' meters along the line
-    for (let dist = 0; dist <= totalLength; dist += interval) {
-      const pt = turf.along(line, dist, { units: 'meters' });
-      const [lng, lat] = pt.geometry.coordinates;
+      const elevationPrev = map.queryTerrainElevation(prevCoord, { exaggeration: 1 });
+      const elevationCurr = map.queryTerrainElevation(currCoord, { exaggeration: 1 });
 
-      // sample a bit ahead for slope
-      const aheadDist = Math.min(dist + 100, totalLength);
-      const ptAhead = turf.along(line, aheadDist, { units: 'meters' });
-      const [lng2, lat2] = ptAhead.geometry.coordinates;
+      const distance = haversineDistance(prevCoord, currCoord);
 
-      const elev1 = map.queryTerrainElevation([lng, lat], { exaggeration: 1 });
-      const elev2 = map.queryTerrainElevation([lng2, lat2], { exaggeration: 1 });
-
-      const horiz = turf.distance(pt, ptAhead, { units: 'meters' });
-      const slopeRaw = horiz > 0 ? ((elev2 - elev1) / horiz) * 100 : 0;
-      const slope = Number(slopeRaw.toFixed(4))
-      // inclinationsArray.push(slope)
-
-      inclinationsArray.push({
-        distanceAlongRoute: dist,
-        slopePercent: slope,
-        coord: [lng, lat],
-      });
+      const slope = distance !== 0 ? ((elevationCurr - elevationPrev) / distance) * 100 : 0;
+      inclinationsArray.push(slope);
     }
-
     setInclinations(inclinationsArray);
-    console.log('Inclinations every 2 miles:', inclinationsArray);
+    console.log('Inclinations along route (%):', inclinationsArray);
+  };
+
+
+  const haversineDistance = (coord1, coord2) => {
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const [lon1, lat1] = coord1;
+    const [lon2, lat2] = coord2;
+    const R = 6371000;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
   };
 
   const animateMarker = () => {
@@ -147,9 +147,9 @@ const MapComponent = () => {
     markerEl.style.height = '10px';
     markerEl.style.borderRadius = '50%';
 
-    const marker = new mapboxgl.Marker(markerEl)
-      .setLngLat(coordinates[0])
-      .addTo(map);
+
+    const marker = new mapboxgl.Marker(markerEl).setLngLat(coordinates[0]).addTo(map);
+
 
     function animate() {
       counter++;
@@ -169,33 +169,9 @@ const MapComponent = () => {
       >
         Start Movement
       </button>
-     <button
-       onClick={() => downloadInclinationCsv(inclinations)}
-       style={{ position: 'absolute', top: '50px', left: '10px', zIndex: 1 }}
-     >
-       Download CSV
-     </button>
-      {/* {inclinations.length > 0 && (
-        <InclinationChart inclinations={inclinations} />
-      )} */}
+      {inclinations.length > 0 && <InclinationChart inclinations={inclinations} />}
     </div>
   );
-
-
-  // return (
-  //   <div>
-  //     <div ref={mapContainerRef} style={{ width: '100%', height: '100vh' }} />
-  //     <button
-  //       onClick={animateMarker}
-  //       style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 1 }}
-  //     >
-  //       Start Movement
-  //     </button>
-  //     {inclinations.length > 0 && (
-  //       <InclinationChart inclinations={inclinations} />
-  //     )}
-  //   </div>
-  // );
 };
 
 export default MapComponent;
